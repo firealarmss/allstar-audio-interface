@@ -1,4 +1,6 @@
-﻿using Newtonsoft.Json;
+﻿//KO4UYJ Caleb
+//Allstarlink Interface
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -128,6 +130,7 @@ public class UDPAudioStreamer
         waveProvider.AddSamples(audioData, 0, audioData.Length);
 
         // TODO: Actually make this work
+        // Does not work
         string filePath = "audio.wav";
         using (var writer = new WaveFileWriter(filePath, waveProvider.WaveFormat))
         {
