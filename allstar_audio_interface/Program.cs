@@ -28,8 +28,30 @@ public class UDPAudioStreamer
     private List<IWebSocketConnection>? connectedSockets;
     private HttpListener? httpListener;
     private bool isHttpListenerRunning = false;
-    private string? ipAddress;
-    private int port;
+    private string? IP_USRP;
+    private string? Socket_IP;
+    private string? HTTP_IP;
+    private int HTTP_PORT;
+    private int Socket_PORT;
+    private int USRP_PORT;
+    private int DebugLevel;
+    private int LocalSound;
+
+    private void LogInfo(string message)
+    {
+        string formattedMessage = $"{DateTime.Now} [Info] {message}";
+        Console.WriteLine(formattedMessage);
+    }
+    private void LogWarning(string message)
+    {
+        string formattedMessage = $"{DateTime.Now} [Warning] {message}";
+        Console.WriteLine(formattedMessage);
+    }
+    private void LogError(string message)
+    {
+        string formattedMessage = $"{DateTime.Now} [Error] {message}";
+        Console.WriteLine(formattedMessage);
+    }
 
     public void Start()
     {
@@ -47,21 +69,35 @@ public class UDPAudioStreamer
         {
             string json = File.ReadAllText(configFilePath);
             var config = JsonConvert.DeserializeObject<Configuration>(json);
-            ipAddress = config.IP;
-            port = config.Port;
+            IP_USRP = config.IP_USRP;
+            Socket_IP = config.Socket_IP;
+            HTTP_IP = config.HTTP_IP;
+            HTTP_PORT = config.HTTP_PORT;
+            Socket_PORT = config.Socket_PORT;
+            USRP_PORT = config.USRP_PORT;
+            DebugLevel = config.DebugLevel;
+            LocalSound = config.LocalSound;
+
+
+            LogInfo("Loaded Config:   " + configFilePath);
         }
         else
         {
             
-            Console.WriteLine("Error using config file. Using default values.");
-            ipAddress = "0.0.0.0";
-            port = 34001;
+            LogInfo("Error loading config file. Using default values.");
+            IP_USRP = "0.0.0.0";
+            USRP_PORT = 34001;
+            Socket_IP = "0.0.0.0";
+            HTTP_IP = "0.0.0.0";
+            HTTP_PORT = 8081;
+            Socket_PORT = 8080;
+            DebugLevel = 0;
         }
     }
 
     private void StartUDPReceiver()
     {
-        udpClient = new UdpClient(new IPEndPoint(IPAddress.Parse(ipAddress), port));
+        udpClient = new UdpClient(new IPEndPoint(IPAddress.Parse(IP_USRP), USRP_PORT));
         waveProvider = new BufferedWaveProvider(new WaveFormat(8000, 16, 1));
 
         receiveThread = new Thread(() =>
@@ -79,21 +115,30 @@ public class UDPAudioStreamer
                     {
                         ProcessAudioPacket(receivedData);
                         string audioByte = BitConverter.ToString(receivedData);
-                        Console.WriteLine("UDP Recvied Data: " + audioByte);
+                        if (DebugLevel > 5)
+                        {
+                            LogInfo("UDP Recvied Data: " + audioByte);
+                        }
                     }
                     else if (packetType == USRPVoicePacketType.Start)
                     {
-                        Console.WriteLine("UDP Start Data");
+                        if (DebugLevel > 2) {
+
+                            LogInfo("UDP Start Data");
+                        }
                     }
                     else if (packetType == USRPVoicePacketType.End)
                     {
-                        Console.WriteLine("UDP Stop Data");
+                        if (DebugLevel > 2)
+                        {
+                            LogInfo("UDP Stop Data");
+                        }
                     }
                 }
             }
             catch (SocketException ex)
             {
-                Console.WriteLine("UDP Receiver Error: " + ex.Message);
+                LogError("UDP Receiver Error: " + ex.Message);
             }
         });
         receiveThread.Start();
@@ -127,7 +172,10 @@ public class UDPAudioStreamer
         byte[] audioData = new byte[packet.Length - 32];
         Array.Copy(packet, 32, audioData, 0, audioData.Length);
 
-        waveProvider.AddSamples(audioData, 0, audioData.Length);
+        if (LocalSound == 1)
+        {
+            waveProvider.AddSamples(audioData, 0, audioData.Length);
+        }
 
         // TODO: Actually make this work
         // Does not work
@@ -152,37 +200,58 @@ public class UDPAudioStreamer
     private void InitializeAudioOutput()
     {
         waveOut = new WaveOutEvent();
-        waveOut.Init(waveProvider);
-        waveOut.Play();
+
+        if (LocalSound == 1)
+        {
+            waveOut.Init(waveProvider);
+            waveOut.Play();
+            LogInfo("Local speaker output enabled.");
+        }
+        else
+        {
+            LogInfo("Local speaker output disabled.");
+        }
     }
+
 
     private void StartWebSocketServer()
     {
-        server = new WebSocketServer($"ws://{ipAddress}:8080");
+        server = new WebSocketServer($"ws://{Socket_IP}:{Socket_PORT}");
         connectedSockets = new List<IWebSocketConnection>();
 
         server.Start(socket =>
         {
             socket.OnOpen = () =>
             {
-                Console.WriteLine("WebSocket connection open");
+                if (DebugLevel > 2)
+                {
+                    LogInfo("WebSocket connection open");
+                }
                 connectedSockets.Add(socket);
+
             };
 
             socket.OnClose = () =>
             {
-                Console.WriteLine("WebSocket connection closed");
+                if (DebugLevel > 2)
+                {
+                    LogInfo("WebSocket connection closed");
+                }
                 connectedSockets.Remove(socket);
+
             };
 
             socket.OnMessage = message =>
             {
-                Console.WriteLine("Received WebSocket message: " + message);
+                if (DebugLevel > 2)
+                {
+                    LogInfo("Received WebSocket message: " + message);
+                }
             };
 
             socket.OnBinary = data =>
             {
-                // Not implemented in this example
+                // Not used for now
             };
         });
     }
@@ -190,13 +259,14 @@ public class UDPAudioStreamer
     private void StartHttpListener()
     {
         httpListener = new HttpListener();
-        httpListener.Prefixes.Add($"http://192.168.1.128:8081/"); // Set the URL for the web server. 0.0.0.0 prob wont work on windows
+        httpListener.Prefixes.Add($"http://{HTTP_IP}:{HTTP_PORT}/");
 
         try
         {
             httpListener.Start();
             isHttpListenerRunning = true;
-            Console.WriteLine("Listening for HTTP requests...");
+            LogInfo("HTTP Server Started");
+            LogInfo("HTTP Info:  Host: " + HTTP_IP + " Port: " + HTTP_PORT);
 
             while (true)
             {
@@ -225,7 +295,7 @@ public class UDPAudioStreamer
         }
         catch (HttpListenerException ex)
         {
-            Console.WriteLine("Error: " + ex.Message);
+            LogError("Error Starting HTTP Server: " + ex.Message);
         }
         finally
         {
@@ -274,8 +344,16 @@ public class UDPAudioStreamer
 
     private class Configuration
     {
-        public string? IP { get; set; }
-        public int Port { get; set; }
+        public string? IP_USRP { get; set; }
+        public string? HTTP_IP { get; set; }
+        public string? Socket_IP { get; set; }
+
+        public int USRP_PORT { get; set; }
+        public int HTTP_PORT { get; set; }
+        public int Socket_PORT { get; set; }
+        public int DebugLevel { get; set; }
+        public int LocalSound { get; set; }
+
     }
 }
 
