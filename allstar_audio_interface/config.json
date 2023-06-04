@@ -1,4 +1,12 @@
 {
-  "IP": "0.0.0.0",
-  "Port": 34001
+  "LocalSound": 0,
+  "IP_USRP": "192.168.1.128",
+  "Socket_IP": "192.168.1.128",
+  "HTTP_IP": "192.168.1.128",
+  "USRP_PORT": 34001,
+  "Socket_PORT": 8080,
+  "HTTP_PORT": 8081,
+  "WebUser": "future use",
+  "WebPassword": "future use",
+  "DebugLevel": 2
 }
