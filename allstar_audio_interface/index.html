@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Stream Player</title>
+</head>
+<body>
+    <h1>Audio Stream Player</h1>
+    <audio id="audioPlayer" controls></audio>
+    <button id="startButton">Start Audio</button>
+
+    <script>
+        const audioPlayer = document.getElementById('audioPlayer');
+        const socket = new WebSocket('ws://192.168.1.128:8080');
+
+        let audioContext;
+        let audioBuffer;
+        let sourceNode;
+
+        document.getElementById('startButton').addEventListener('click', function() {
+            startAudioContext();
+        });
+
+        socket.onmessage = function(event) {
+            const audioData = event.data;
+            processAudioData(audioData);
+        };
+
+        function startAudioContext() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            audioPlayer.src = "";
+
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function processAudioData(audioData) {
+            if (!audioContext) {
+                console.error('AudioContext is not created. Please click the "Start Audio" button.');
+                return;
+            }
+
+            toBuffer(audioData, function(buffer) {
+                audioContext.decodeAudioData(buffer, function(decodedData) {
+                    audioBuffer = decodedData;
+                    playAudio();
+                }, function(error) {
+                    console.error('Error decoding audio data:', error);
+                });
+            });
+        }
+
+        function toBuffer(audioData, callback) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const arrayBuffer = event.target.result;
+                callback(arrayBuffer);
+            };
+            reader.readAsArrayBuffer(audioData);
+        }
+
+        function playAudio() {
+            if (!sourceNode) {
+                sourceNode = audioContext.createBufferSource();
+                sourceNode.buffer = audioBuffer;
+                sourceNode.connect(audioContext.destination);
+                sourceNode.start();
+            } else {
+                sourceNode.stop();
+                sourceNode = audioContext.createBufferSource();
+                sourceNode.buffer = audioBuffer;
+                sourceNode.connect(audioContext.destination);
+                sourceNode.start();
+            }
+        }
+    </script>
+</body>
+</html>
