@@ -10,11 +10,11 @@ On linux, install stuff then dotnet Build.
 
 # Allstarlink Interface Setup
 
-TODO
+Coming Soon!
 
 # Allstarlink Setup
 
-TODO
+Coming Soon!
 
 ## Authors
 
